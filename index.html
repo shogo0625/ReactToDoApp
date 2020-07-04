@@ -5,10 +5,216 @@
   <meta charset="UTF-8">
   <title>React ToDo App</title>
   <link rel="stylesheet" href="css/styles.css">
+  <!-- Reactの本体 -->
+  <script src="https://unpkg.com/react@16/umd/react.development.js"></script>
+  <!-- Reactの結果をブラウザのDOMに反映させていくためのライブラリ -->
+  <script src="https://unpkg.com/react-dom@16/umd/react-dom.development.js"></script>
+  <!-- Babel　JSXやES6を使うためのライブラリ 開発版-->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 
 <body>
+  <!-- Reactを表示する領域 -->
+  <div id="root"></div>
 
+  <script type="text/babel">
+    (() => {
+      const todos = [];
+
+      function TodoHeader(props) {
+        // 引数で受け取ったtodosにfilterでisDoneがfalseのものだけの配列を作る
+        const remaining = props.todos.filter(todo => {
+          return !todo.isDone;
+        });
+
+        return (
+          <h1>
+            <button onClick={props.purge}>Purge</button>
+            My todos
+            <span>({remaining.length}/{props.todos.length})</span>
+          </h1>
+        );
+      }
+
+      // TodoListからpropsで id と todo受け取り
+      function TodoItem(props) {
+        return (
+          <li>
+            <label>
+              <input type="checkbox"
+                checked={props.todo.isDone}
+                onChange={() => props.checkTodo(props.todo)}
+              />
+              <span className={props.todo.isDone ? 'done' : ''}>
+                {props.todo.title}
+              </span>
+            </label>
+            <span className="cmd" onClick={() => props.deleteTodo(props.todo)}>[x]</span>
+          </li>
+        );
+      }
+
+      // Appからpropsでstateのtodos受け取り
+      function TodoList(props) {
+        const todos = props.todos.map(todo => {
+          return (
+            <TodoItem
+              key={todo.id}
+              todo={todo}
+              checkTodo={props.checkTodo}
+              deleteTodo={props.deleteTodo}
+            />
+          );
+        });
+        return (
+          <ul>
+            {props.todos.length ? todos : <li>Nothing to do!</li>}
+          </ul>
+        );
+      }
+
+      function TodoForm(props) {
+        return (
+          <form onSubmit={props.addTodo}>
+            <input type="text" value={props.item} onChange={props.updateItem} />
+            <input type="submit" value="Add" />
+          </form>
+        );
+      }
+
+      function getUniqueId() {
+        return new Date().getTime().toString(36) + '-' + Math.random().toString(36);
+      }
+
+      class App extends React.Component {
+        constructor() {
+          super();
+          this.state = {
+            todos: todos,
+            item: ''
+          };
+          this.checkTodo = this.checkTodo.bind(this);
+          this.deleteTodo = this.deleteTodo.bind(this);
+          this.updateItem = this.updateItem.bind(this);
+          this.addTodo = this.addTodo.bind(this);
+          this.purge = this.purge.bind(this);
+        }
+
+        purge() {
+          if (!confirm('Are you sure?')) {
+            return;
+          }
+          // まだチェックしていないToDoだけ集めてsetStateする＝それ以外削除する
+          const todos = this.state.todos.filter(todo => {
+            return !todo.isDone;
+          });
+          this.setState({
+            todos: todos
+          })
+        }
+
+        addTodo(e) {
+          e.preventDefault(); // ページ遷移無効化
+          // trim 両端の空白を取り除く　その状態で空であればreturn
+          if (this.state.item.trim() === '') {
+            return;
+          }
+
+          const item = {
+            id: getUniqueId(),
+            title: this.state.item,
+            isDone: false
+          };
+
+          const todos = this.state.todos.slice();
+          todos.push(item);
+          this.setState({
+            todos: todos,
+            item: ''
+          });
+        }
+
+        deleteTodo(todo) {
+          if (!confirm('Are you sure?')) {
+            return;
+          }
+          // slice 配列の一部をコピー（引数にインデックス番号で指定）
+          const todos = this.state.todos.slice();
+          const pos = this.state.todos.indexOf(todo);
+          // [pos]番目から１番目を削除
+          todos.splice(pos, 1);
+          this.setState({
+            todos: todos
+          });
+        }
+
+        checkTodo(todo) {
+          // まずはオブジェクトのコピーを作る(すべてのプロパティの値を持つコピー)
+          const todos = this.state.todos.map(todo => {
+            return { id: todo.id, title: todo.title, isDone: todo.isDone };
+          });
+          // 上で作成した配列から何番目の要素のisDoneを変更すれば良いか調べる
+          // まずstate.todos（元のtodos）のidの値のみ持つ配列を作る
+          const pos = this.state.todos.map(todo => {
+            return todo.id;
+            // その配列に対して、indexOf（渡されたtodo）を使い、渡されてきたtodoと同じものが何番目か調べる
+          }).indexOf(todo.id);
+          // 最初にコピーしたtodosの[pos]番目の要素のisDoneを反転
+          todos[pos].isDone = !todos[pos].isDone;
+          // 新しく作ったtodosでsetState
+          this.setState({
+            todos: todos
+          });
+        }
+
+        // formの値はイベントオブジェクトから取得できる
+        updateItem(e) {
+          this.setState({
+            item: e.target.value
+          });
+        }
+
+        // Local Storageにデータを保持する
+        componentDidUpdate() {
+          localStorage.setItem('todos', JSON.stringify(this.state.todos));
+        }
+        // データの読み込み　コンポーネントがマウントされる際にLocalStorageを読み込む
+        componentDidMount() {
+          this.setState({
+            todos: JSON.parse(localStorage.getItem('todos'))
+          });
+        }
+
+        render() {
+          return (
+            <div className="container">
+              <TodoHeader
+                todos={this.state.todos}
+                purge={this.purge}
+              />
+              {/* Todoのリストを表示するコンポーネント　todos属性でstateのtodosを渡す */}
+              <TodoList
+                todos={this.state.todos}
+                checkTodo={this.checkTodo}
+                deleteTodo={this.deleteTodo}
+              />
+              <TodoForm
+                item={this.state.item}
+                updateItem={this.updateItem}
+                addTodo={this.addTodo}
+              />
+            </div>
+          );
+        }
+      }
+
+      // 第１引数のコンポーネントを第２引数で取得する場所に描画
+      ReactDOM.render(
+        <App />,
+        document.getElementById('root')
+      )
+    })(); // 即時関数
+  </script>
 </body>
 
 </html>
